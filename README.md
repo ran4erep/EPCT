@@ -40,10 +40,10 @@ Requirements:
 - MinGW-w64 or other C++ compiler with Windows API support
 - Windows SDK
 
-# Compile resources
+### Compile resources
 `windres resource.rc -O coff -o resource.res`
 
-# Compile program
+### Compile program
 `g++ -O2 -o headphone.exe headphone.cpp resource.res -lwinmm -mwindows`
 
 ## License
