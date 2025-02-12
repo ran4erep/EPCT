@@ -4,9 +4,15 @@
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
+#include <initguid.h>
+#include <mmdeviceapi.h>
+#include <functiondiscoverykeys_devpkey.h>
+#include <timeapi.h>
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "winmm.lib")
+
+DEFINE_GUID(GUID_DEVINTERFACE_AUDIO_RENDER, 0xE6327CAD, 0xDCEC, 0x4949, 0xAE, 0x8A, 0x99, 0x1E, 0x97, 0x6A, 0x79, 0xD2);
 
 HWND g_hwnd = NULL;
 bool g_lastState = false;
@@ -98,7 +104,7 @@ void GenerateWavFile(const WCHAR* filename) {
 
 bool InitializeAudio() {
     if (!GetTempPathW(MAX_PATH, g_wavPath)) return false;
-    wcscat_s(g_wavPath, MAX_PATH, L"headphone_monitor.wav");
+    wcscat_s(g_wavPath, MAX_PATH, L"EPCT.wav");
     
     if (GetFileAttributesW(g_wavPath) == INVALID_FILE_ATTRIBUTES) {
         GenerateWavFile(g_wavPath);
@@ -106,9 +112,26 @@ bool InitializeAudio() {
     return true;
 }
 
+bool IsAudioDeviceReady() {
+    WAVEOUTCAPS woc;
+    return waveOutGetDevCaps(WAVE_MAPPER, &woc, sizeof(WAVEOUTCAPS)) == MMSYSERR_NOERROR;
+}
+
 void PlayStereoSound(bool isConnected) {
     if (!isConnected) return;
-    PlaySoundW(g_wavPath, NULL, SND_FILENAME | SND_SYNC);
+
+    timeBeginPeriod(1);
+
+    for (int i = 0; i < 10; i++) {
+        if (IsAudioDeviceReady()) {
+            Sleep(100);
+            PlaySoundW(g_wavPath, NULL, SND_FILENAME | SND_SYNC);
+            break;
+        }
+        Sleep(100);
+    }
+
+    timeEndPeriod(1);
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -117,14 +140,17 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (wParam == DBT_DEVICEARRIVAL || wParam == DBT_DEVICEREMOVECOMPLETE) {
                 DEV_BROADCAST_HDR* pHdr = (DEV_BROADCAST_HDR*)lParam;
                 if (pHdr->dbch_devicetype == DBT_DEVTYP_DEVICEINTERFACE) {
-                    bool currentState = (wParam == DBT_DEVICEARRIVAL);
-                    if (g_firstRun) {
-                        g_lastState = currentState;
-                        g_firstRun = false;
-                    } 
-                    else if (currentState != g_lastState) {
-                        PlayStereoSound(currentState);
-                        g_lastState = currentState;
+                    DEV_BROADCAST_DEVICEINTERFACE* pDevInf = (DEV_BROADCAST_DEVICEINTERFACE*)pHdr;
+                    if (IsEqualGUID(pDevInf->dbcc_classguid, GUID_DEVINTERFACE_AUDIO_RENDER)) {
+                        bool currentState = (wParam == DBT_DEVICEARRIVAL);
+                        if (g_firstRun) {
+                            g_lastState = currentState;
+                            g_firstRun = false;
+                        } 
+                        else if (currentState != g_lastState) {
+                            PlayStereoSound(currentState);
+                            g_lastState = currentState;
+                        }
                     }
                 }
             }
@@ -146,20 +172,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wc.hInstance = hInstance;
     wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(1));
     wc.hIconSm = LoadIcon(hInstance, MAKEINTRESOURCE(1));
-    wc.lpszClassName = L"HeadphoneMonitorClass";
+    wc.lpszClassName = L"EPCTClass";
     
     if (!RegisterClassExW(&wc)) return 1;
 
-    g_hwnd = CreateWindowExW(0, L"HeadphoneMonitorClass", L"Headphone Monitor",
+    g_hwnd = CreateWindowExW(0, L"EPCTClass", L"EPCT",
         WS_OVERLAPPED, CW_USEDEFAULT, CW_USEDEFAULT, 1, 1, NULL, NULL, hInstance, NULL);
     if (!g_hwnd) return 1;
 
     DEV_BROADCAST_DEVICEINTERFACE_W notificationFilter = {0};
     notificationFilter.dbcc_size = sizeof(notificationFilter);
     notificationFilter.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
+    notificationFilter.dbcc_classguid = GUID_DEVINTERFACE_AUDIO_RENDER;
     
     HDEVNOTIFY deviceNotify = RegisterDeviceNotificationW(g_hwnd, &notificationFilter,
-        DEVICE_NOTIFY_WINDOW_HANDLE | DEVICE_NOTIFY_ALL_INTERFACE_CLASSES);
+        DEVICE_NOTIFY_WINDOW_HANDLE);
     if (!deviceNotify) {
         DestroyWindow(g_hwnd);
         return 1;
