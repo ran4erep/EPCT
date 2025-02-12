@@ -6,7 +6,7 @@ EPCT is a lightweight Windows utility that helps users identify the correct orie
 
 - Detects headphone connection event
 - Plays a stereo test sound (moving from left to right channel)
-- Minimal resource usage (<2 MB RAM)
+- Minimal resource usage (<1.5 MB RAM)
 - Works in background without UI
 
 ## Why Use It?
@@ -44,7 +44,7 @@ Requirements:
 `windres resource.rc -O coff -o resource.res`
 
 ### Compile program
-`g++ -O2 -o headphone.exe headphone.cpp resource.res -lwinmm -mwindows`
+`g++ -O2 -o EPCT.exe epct.cpp resource.res -lwinmm -mwindows -DUNICODE`
 
 ## License
 
